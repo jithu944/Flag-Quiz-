@@ -47,9 +47,16 @@
   .feedback.bad { color:var(--bad); }
   .score-big { font-size:52px; font-weight:800; margin:10px 0; }
   .hidden { display:none; }
+  .sound-toggle {
+    position:fixed; top:16px; right:16px; width:44px; height:44px; border-radius:50%;
+    border:none; background:var(--card); color:var(--text); font-size:20px; cursor:pointer;
+    box-shadow:0 6px 18px rgba(0,0,0,.4); transition:filter .2s;
+  }
+  .sound-toggle:hover { filter:brightness(1.25); }
 </style>
 </head>
 <body>
+<button id="soundToggle" class="sound-toggle" onclick="toggleSound()" title="Turn sound on/off">🔊</button>
 <div class="app">
   <!-- START SCREEN -->
   <div id="start" class="card">
@@ -137,6 +144,43 @@ const COUNTRIES = [
 
 const TOTAL = 10;
 const TIME_LIMIT = 15;
+
+// --- Sound effects (generated in the browser, no files needed) ---
+let audioCtx = null;
+let soundOn = true;
+
+function initAudio() {
+  if (!audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) audioCtx = new AC();
+  }
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+function beep(freq, duration, type, vol, delay) {
+  if (!soundOn || !audioCtx) return;
+  const t = audioCtx.currentTime + (delay || 0);
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + duration + 0.03);
+}
+
+function playTick(urgent) { beep(urgent ? 1300 : 850, 0.05, 'square', urgent ? 0.16 : 0.06, 0); }
+function playCorrect() { beep(660, 0.12, 'sine', 0.2, 0); beep(990, 0.2, 'sine', 0.2, 0.11); }
+function playWrong() { beep(200, 0.3, 'sawtooth', 0.18, 0); beep(150, 0.35, 'sawtooth', 0.18, 0.09); }
+
+function toggleSound() {
+  soundOn = !soundOn;
+  document.getElementById('soundToggle').textContent = soundOn ? '🔊' : '🔇';
+  if (soundOn) initAudio();
+}
 let questions = [];
 let current = 0;
 let score = 0;
@@ -157,6 +201,7 @@ function startTimer() {
     timeLeft--;
     el.textContent = '⏱ ' + timeLeft + 's';
     if (timeLeft <= 5) el.classList.add('low');
+    if (timeLeft > 0) playTick(timeLeft <= 5);
     if (timeLeft <= 0) {
       stopTimer();
       timeUp();
@@ -184,6 +229,7 @@ function buildQuestions() {
 }
 
 function startGame() {
+  initAudio();
   questions = buildQuestions();
   current = 0;
   score = 0;
@@ -220,6 +266,7 @@ function timeUp() {
   buttons.forEach(b => b.disabled = true);
   const answer = questions[current].answer;
   buttons.forEach(b => { if (b.textContent === answer.n) b.classList.add('correct'); });
+  playWrong();
   const fb = document.getElementById('feedback');
   fb.textContent = "Time's up! ⏱ It was " + answer.n;
   fb.className = 'feedback bad';
@@ -237,12 +284,14 @@ function choose(btn, opt, answer) {
 
   if (opt.c === answer.c) {
     btn.classList.add('correct');
+    playCorrect();
     score++;
     document.getElementById('score').textContent = score;
     fb.textContent = 'Correct! ✅';
     fb.className = 'feedback good';
   } else {
     btn.classList.add('wrong');
+    playWrong();
     buttons.forEach(b => { if (b.textContent === answer.n) b.classList.add('correct'); });
     fb.textContent = 'Wrong — it was ' + answer.n;
     fb.className = 'feedback bad';
