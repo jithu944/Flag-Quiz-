@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guess the Flag</title>
+<style>
+  :root { --bg:#0f1226; --card:#1b1f3b; --accent:#5b8def; --good:#23c552; --bad:#e5484d; --text:#eef1ff; --muted:#9aa3c7; }
+  * { box-sizing: border-box; }
+  body {
+    margin:0; min-height:100vh; font-family: "Segoe UI", system-ui, sans-serif;
+    background: radial-gradient(circle at top, #232a5c, var(--bg));
+    color: var(--text); display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .app { width:100%; max-width:560px; }
+  .card {
+    background: var(--card); border-radius:20px; padding:28px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.45); text-align:center;
+  }
+  h1 { margin:0 0 6px; font-size:28px; }
+  .sub { color: var(--muted); margin:0 0 22px; font-size:15px; }
+  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; font-size:15px; color:var(--muted); }
+  .topbar b { color:var(--text); }
+  .timer { font-weight:700; color:var(--text); }
+  .timer.low { color:var(--bad); animation:pulse .6s infinite; }
+  @keyframes pulse { 50% { opacity:.45; } }
+  .progress { height:8px; background:#2a3060; border-radius:999px; overflow:hidden; margin-bottom:22px; }
+  .progress > div { height:100%; width:0; background:var(--accent); transition:width .3s; }
+  .flag-wrap { background:#fff; border-radius:14px; padding:14px; display:inline-block; margin-bottom:22px; }
+  .flag-wrap img { display:block; width:300px; max-width:100%; height:auto; border-radius:6px; }
+  .options { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .opt {
+    padding:14px 10px; border:none; border-radius:12px; background:#2a3060; color:var(--text);
+    font-size:15px; cursor:pointer; transition:transform .08s, background .2s; min-height:54px;
+  }
+  .opt:hover:not(:disabled) { background:#343c78; transform:translateY(-2px); }
+  .opt:disabled { cursor:default; }
+  .opt.correct { background:var(--good); color:#fff; }
+  .opt.wrong { background:var(--bad); color:#fff; }
+  .btn {
+    margin-top:22px; padding:14px 28px; border:none; border-radius:12px; background:var(--accent);
+    color:#fff; font-size:16px; font-weight:600; cursor:pointer; transition:filter .2s;
+  }
+  .btn:hover { filter:brightness(1.1); }
+  .feedback { margin-top:16px; min-height:22px; font-weight:600; }
+  .feedback.good { color:var(--good); }
+  .feedback.bad { color:var(--bad); }
+  .score-big { font-size:52px; font-weight:800; margin:10px 0; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- START SCREEN -->
+  <div id="start" class="card">
+    <h1>🌍 Guess the Flag</h1>
+    <p class="sub">10 questions. Each shows a flag and 4 country names &mdash; pick the right one!</p>
+    <button class="btn" onclick="startGame()">Start Quiz</button>
+  </div>
+
+  <!-- QUIZ SCREEN -->
+  <div id="quiz" class="card hidden">
+    <div class="topbar">
+      <span>Question <b id="qNum">1</b> / 10</span>
+      <span id="timer" class="timer">⏱ 15s</span>
+      <span>Score: <b id="score">0</b></span>
+    </div>
+    <div class="progress"><div id="bar"></div></div>
+    <div class="flag-wrap"><img id="flag" alt="flag to guess"></div>
+    <div class="options" id="options"></div>
+    <div class="feedback" id="feedback"></div>
+    <button class="btn hidden" id="nextBtn" onclick="nextQuestion()">Next</button>
+  </div>
+
+  <!-- RESULT SCREEN -->
+  <div id="result" class="card hidden">
+    <h1>Quiz complete!</h1>
+    <div class="score-big"><span id="finalScore">0</span> / 10</div>
+    <p class="sub" id="resultMsg"></p>
+    <button class="btn" onclick="startGame()">Play Again</button>
+  </div>
+</div>
+
+<script>
+const COUNTRIES = [
+  {n:'Afghanistan',c:'af'},{n:'Albania',c:'al'},{n:'Algeria',c:'dz'},{n:'Andorra',c:'ad'},
+  {n:'Angola',c:'ao'},{n:'Antigua and Barbuda',c:'ag'},{n:'Argentina',c:'ar'},{n:'Armenia',c:'am'},
+  {n:'Australia',c:'au'},{n:'Austria',c:'at'},{n:'Azerbaijan',c:'az'},{n:'Bahamas',c:'bs'},
+  {n:'Bahrain',c:'bh'},{n:'Bangladesh',c:'bd'},{n:'Barbados',c:'bb'},{n:'Belarus',c:'by'},
+  {n:'Belgium',c:'be'},{n:'Belize',c:'bz'},{n:'Benin',c:'bj'},{n:'Bhutan',c:'bt'},
+  {n:'Bolivia',c:'bo'},{n:'Bosnia and Herzegovina',c:'ba'},{n:'Botswana',c:'bw'},{n:'Brazil',c:'br'},
+  {n:'Brunei',c:'bn'},{n:'Bulgaria',c:'bg'},{n:'Burkina Faso',c:'bf'},{n:'Burundi',c:'bi'},
+  {n:'Cabo Verde',c:'cv'},{n:'Cambodia',c:'kh'},{n:'Cameroon',c:'cm'},{n:'Canada',c:'ca'},
+  {n:'Central African Republic',c:'cf'},{n:'Chad',c:'td'},{n:'Chile',c:'cl'},{n:'China',c:'cn'},
+  {n:'Colombia',c:'co'},{n:'Comoros',c:'km'},{n:'Congo',c:'cg'},{n:'Costa Rica',c:'cr'},
+  {n:"Côte d'Ivoire",c:'ci'},{n:'Croatia',c:'hr'},{n:'Cuba',c:'cu'},{n:'Cyprus',c:'cy'},
+  {n:'Czech Republic (Czechia)',c:'cz'},{n:'Denmark',c:'dk'},{n:'Djibouti',c:'dj'},{n:'Dominica',c:'dm'},
+  {n:'Dominican Republic',c:'do'},{n:'North Korea',c:'kp'},{n:'DR Congo',c:'cd'},{n:'Ecuador',c:'ec'},
+  {n:'Egypt',c:'eg'},{n:'El Salvador',c:'sv'},{n:'Equatorial Guinea',c:'gq'},{n:'Eritrea',c:'er'},
+  {n:'Estonia',c:'ee'},{n:'Eswatini',c:'sz'},{n:'Ethiopia',c:'et'},{n:'Fiji',c:'fj'},
+  {n:'Finland',c:'fi'},{n:'France',c:'fr'},{n:'Gabon',c:'ga'},{n:'Gambia',c:'gm'},
+  {n:'Georgia',c:'ge'},{n:'Germany',c:'de'},{n:'Ghana',c:'gh'},{n:'Greece',c:'gr'},
+  {n:'Grenada',c:'gd'},{n:'Guatemala',c:'gt'},{n:'Guinea',c:'gn'},{n:'Guinea-Bissau',c:'gw'},
+  {n:'Guyana',c:'gy'},{n:'Haiti',c:'ht'},{n:'Holy See',c:'va'},{n:'Honduras',c:'hn'},
+  {n:'Hungary',c:'hu'},{n:'Iceland',c:'is'},{n:'India',c:'in'},{n:'Indonesia',c:'id'},
+  {n:'Iran',c:'ir'},{n:'Iraq',c:'iq'},{n:'Ireland',c:'ie'},{n:'Israel',c:'il'},
+  {n:'Italy',c:'it'},{n:'Jamaica',c:'jm'},{n:'Japan',c:'jp'},{n:'Jordan',c:'jo'},
+  {n:'Kazakhstan',c:'kz'},{n:'Kenya',c:'ke'},{n:'Kiribati',c:'ki'},{n:'Kuwait',c:'kw'},
+  {n:'Kyrgyzstan',c:'kg'},{n:'Laos',c:'la'},{n:'Latvia',c:'lv'},{n:'Lebanon',c:'lb'},
+  {n:'Lesotho',c:'ls'},{n:'Liberia',c:'lr'},{n:'Libya',c:'ly'},{n:'Liechtenstein',c:'li'},
+  {n:'Lithuania',c:'lt'},{n:'Luxembourg',c:'lu'},{n:'Madagascar',c:'mg'},{n:'Malawi',c:'mw'},
+  {n:'Malaysia',c:'my'},{n:'Maldives',c:'mv'},{n:'Mali',c:'ml'},{n:'Malta',c:'mt'},
+  {n:'Marshall Islands',c:'mh'},{n:'Mauritania',c:'mr'},{n:'Mauritius',c:'mu'},{n:'Mexico',c:'mx'},
+  {n:'Micronesia',c:'fm'},{n:'Moldova',c:'md'},{n:'Monaco',c:'mc'},{n:'Mongolia',c:'mn'},
+  {n:'Montenegro',c:'me'},{n:'Morocco',c:'ma'},{n:'Mozambique',c:'mz'},{n:'Myanmar',c:'mm'},
+  {n:'Namibia',c:'na'},{n:'Nauru',c:'nr'},{n:'Nepal',c:'np'},{n:'Netherlands',c:'nl'},
+  {n:'New Zealand',c:'nz'},{n:'Nicaragua',c:'ni'},{n:'Niger',c:'ne'},{n:'Nigeria',c:'ng'},
+  {n:'North Macedonia',c:'mk'},{n:'Norway',c:'no'},{n:'Oman',c:'om'},{n:'Pakistan',c:'pk'},
+  {n:'Palau',c:'pw'},{n:'Panama',c:'pa'},{n:'Papua New Guinea',c:'pg'},{n:'Paraguay',c:'py'},
+  {n:'Peru',c:'pe'},{n:'Philippines',c:'ph'},{n:'Poland',c:'pl'},{n:'Portugal',c:'pt'},
+  {n:'Qatar',c:'qa'},{n:'Romania',c:'ro'},{n:'Russia',c:'ru'},{n:'Rwanda',c:'rw'},
+  {n:'Saint Kitts & Nevis',c:'kn'},{n:'Saint Lucia',c:'lc'},{n:'Samoa',c:'ws'},{n:'San Marino',c:'sm'},
+  {n:'Sao Tome & Principe',c:'st'},{n:'Saudi Arabia',c:'sa'},{n:'Senegal',c:'sn'},{n:'Serbia',c:'rs'},
+  {n:'Seychelles',c:'sc'},{n:'Sierra Leone',c:'sl'},{n:'Singapore',c:'sg'},{n:'Slovakia',c:'sk'},
+  {n:'Slovenia',c:'si'},{n:'Solomon Islands',c:'sb'},{n:'Somalia',c:'so'},{n:'South Africa',c:'za'},
+  {n:'South Korea',c:'kr'},{n:'South Sudan',c:'ss'},{n:'Spain',c:'es'},{n:'Sri Lanka',c:'lk'},
+  {n:'St. Vincent & Grenadines',c:'vc'},{n:'State of Palestine',c:'ps'},{n:'Sudan',c:'sd'},{n:'Suriname',c:'sr'},
+  {n:'Sweden',c:'se'},{n:'Switzerland',c:'ch'},{n:'Syria',c:'sy'},{n:'Tajikistan',c:'tj'},
+  {n:'Tanzania',c:'tz'},{n:'Thailand',c:'th'},{n:'Timor-Leste',c:'tl'},{n:'Togo',c:'tg'},
+  {n:'Tonga',c:'to'},{n:'Trinidad and Tobago',c:'tt'},{n:'Tunisia',c:'tn'},{n:'Turkey',c:'tr'},
+  {n:'Turkmenistan',c:'tm'},{n:'Tuvalu',c:'tv'},{n:'United Arab Emirates',c:'ae'},{n:'United Kingdom',c:'gb'},
+  {n:'United States',c:'us'},{n:'Uganda',c:'ug'},{n:'Ukraine',c:'ua'},{n:'Uruguay',c:'uy'},
+  {n:'Uzbekistan',c:'uz'},{n:'Vanuatu',c:'vu'},{n:'Venezuela',c:'ve'},{n:'Vietnam',c:'vn'},
+  {n:'Yemen',c:'ye'},{n:'Zambia',c:'zm'},{n:'Zimbabwe',c:'zw'},
+  {n:'Somaliland',c:'somaliland',u:'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Flag_of_Somaliland.svg/330px-Flag_of_Somaliland.svg.png'}
+];
+
+const TOTAL = 10;
+const TIME_LIMIT = 15;
+let questions = [];
+let current = 0;
+let score = 0;
+let timeLeft = TIME_LIMIT;
+let timerId = null;
+
+function stopTimer() {
+  if (timerId) { clearInterval(timerId); timerId = null; }
+}
+
+function startTimer() {
+  stopTimer();
+  timeLeft = TIME_LIMIT;
+  const el = document.getElementById('timer');
+  el.textContent = '⏱ ' + timeLeft + 's';
+  el.classList.remove('low');
+  timerId = setInterval(() => {
+    timeLeft--;
+    el.textContent = '⏱ ' + timeLeft + 's';
+    if (timeLeft <= 5) el.classList.add('low');
+    if (timeLeft <= 0) {
+      stopTimer();
+      timeUp();
+    }
+  }, 1000);
+}
+
+const flagUrl = country => country.u || `https://www.worldometers.info/images/flags/w320/${country.c}.webp`;
+
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function buildQuestions() {
+  const picks = shuffle(COUNTRIES).slice(0, TOTAL);
+  return picks.map(answer => {
+    const wrongs = shuffle(COUNTRIES.filter(c => c.c !== answer.c)).slice(0, 3);
+    return { answer, options: shuffle([answer, ...wrongs]) };
+  });
+}
+
+function startGame() {
+  questions = buildQuestions();
+  current = 0;
+  score = 0;
+  document.getElementById('start').classList.add('hidden');
+  document.getElementById('result').classList.add('hidden');
+  document.getElementById('quiz').classList.remove('hidden');
+  document.getElementById('score').textContent = score;
+  renderQuestion();
+}
+
+function renderQuestion() {
+  const q = questions[current];
+  document.getElementById('qNum').textContent = current + 1;
+  document.getElementById('bar').style.width = ((current) / TOTAL * 100) + '%';
+  document.getElementById('flag').src = flagUrl(q.answer);
+  document.getElementById('feedback').textContent = '';
+  document.getElementById('feedback').className = 'feedback';
+  document.getElementById('nextBtn').classList.add('hidden');
+
+  const box = document.getElementById('options');
+  box.innerHTML = '';
+  q.options.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.className = 'opt';
+    btn.textContent = opt.n;
+    btn.onclick = () => choose(btn, opt, q.answer);
+    box.appendChild(btn);
+  });
+  startTimer();
+}
+
+function timeUp() {
+  const buttons = document.querySelectorAll('.opt');
+  buttons.forEach(b => b.disabled = true);
+  const answer = questions[current].answer;
+  buttons.forEach(b => { if (b.textContent === answer.n) b.classList.add('correct'); });
+  const fb = document.getElementById('feedback');
+  fb.textContent = "Time's up! ⏱ It was " + answer.n;
+  fb.className = 'feedback bad';
+  document.getElementById('bar').style.width = ((current + 1) / TOTAL * 100) + '%';
+  const nextBtn = document.getElementById('nextBtn');
+  nextBtn.textContent = (current + 1 < TOTAL) ? 'Next' : 'See Results';
+  nextBtn.classList.remove('hidden');
+}
+
+function choose(btn, opt, answer) {
+  stopTimer();
+  const buttons = document.querySelectorAll('.opt');
+  buttons.forEach(b => b.disabled = true);
+  const fb = document.getElementById('feedback');
+
+  if (opt.c === answer.c) {
+    btn.classList.add('correct');
+    score++;
+    document.getElementById('score').textContent = score;
+    fb.textContent = 'Correct! ✅';
+    fb.className = 'feedback good';
+  } else {
+    btn.classList.add('wrong');
+    buttons.forEach(b => { if (b.textContent === answer.n) b.classList.add('correct'); });
+    fb.textContent = 'Wrong — it was ' + answer.n;
+    fb.className = 'feedback bad';
+  }
+  document.getElementById('bar').style.width = ((current + 1) / TOTAL * 100) + '%';
+
+  const nextBtn = document.getElementById('nextBtn');
+  nextBtn.textContent = (current + 1 < TOTAL) ? 'Next' : 'See Results';
+  nextBtn.classList.remove('hidden');
+}
+
+function nextQuestion() {
+  current++;
+  if (current < TOTAL) {
+    renderQuestion();
+  } else {
+    showResult();
+  }
+}
+
+function showResult() {
+  stopTimer();
+  document.getElementById('quiz').classList.add('hidden');
+  document.getElementById('result').classList.remove('hidden');
+  document.getElementById('finalScore').textContent = score;
+  const msgs = [
+    [10, 'Perfect score! 🏆 Geography master!'],
+    [8, 'Excellent! 🌟 You really know your flags.'],
+    [6, 'Nice work! 👍 Solid knowledge.'],
+    [4, 'Not bad — keep practicing! 🌍'],
+    [0, 'Plenty of flags left to learn! 📚']
+  ];
+  document.getElementById('resultMsg').textContent = msgs.find(m => score >= m[0])[1];
+}
+</script>
+</body>
+</html>
